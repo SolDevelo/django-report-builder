@@ -57,7 +57,6 @@ class RelatedFieldsView(GetFieldsMixin, APIView):
 
     """ Get related fields from an ORM model
     """
-    permission_classes = (IsAdminUser,)
 
     def get_data_from_request(self, request):
         self.model = request.data['model']
@@ -117,7 +116,6 @@ class FieldsView(RelatedFieldsView):
 
     """ Get direct fields and properties on an ORM model
     """
-    permission_classes = (IsAdminUser,)
 
     def post(self, request):
         self.get_data_from_request(request)
