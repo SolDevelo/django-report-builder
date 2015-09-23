@@ -105,11 +105,7 @@ class DownloadFileView(DataExportMixin, View):
 
         display_fields = report.get_good_display_fields()
 
-        objects_list, message = self.report_to_list(
-            queryset,
-            display_fields,
-            user,
-            preview=False,)
+        objects_list = report.report_to_list(queryset)
         title = re.sub(r'\W+', '', report.name)[:30]
         header = []
         widths = []

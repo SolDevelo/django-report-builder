@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.utils.safestring import mark_safe
 from django.utils.functional import cached_property
 from django.db import models
-from django.db.models import Avg, Min, Max, Count, Sum, F
+from django.db.models import Avg, Min, Max, Count, Sum, F, Aggregate
 from django.db.models.fields import FieldDoesNotExist
 from six import text_type
 from report_builder.unique_slugify import unique_slugify
@@ -46,6 +46,12 @@ def get_allowed_models():
                 all_model_names.append(element)
         models = models.exclude(model__in=all_model_names)
     return models
+
+
+class Concat(Aggregate):
+    function = 'string_agg'
+    name = 'Concat'
+    template = '%(function)s(%(expressions)s, \', \')'
 
 
 class Report(models.Model):
@@ -90,7 +96,7 @@ class Report(models.Model):
 
     def add_aggregates(self, queryset, display_fields=None):
         agg_funcs = {
-            'Avg': Avg, 'Min': Min, 'Max': Max, 'Count': Count, 'Sum': Sum
+            'Avg': Avg, 'Min': Min, 'Max': Max, 'Count': Count, 'Sum': Sum, 'Concat': Concat
         }
         if display_fields is None:
             display_fields = self.displayfield_set.filter(
@@ -223,10 +229,10 @@ class Report(models.Model):
                     increment_total(total, row_data)
                 data_list.append(row_data)
         else:
-            values_list = list(queryset.values_list(*display_field_paths))
+            it = queryset.values_list(*display_field_paths).iterator()
 
             data_list = []
-            values_index = 0
+            value_row = it.next()
             for obj in queryset:
                 display_property_values = []
                 for display_property in display_field_properties:
@@ -234,7 +240,6 @@ class Report(models.Model):
                     val = reduce(getattr, relations, obj)
                     display_property_values.append(val)
 
-                value_row = values_list[values_index]
                 while value_row[0] == obj.pk:
                     add_row = True
                     data_row = list(value_row[1:])  # Remove added pk
@@ -259,10 +264,9 @@ class Report(models.Model):
                         for position, style in display_formats.items():
                             data_row[position] = formatter(data_row[position], style)
                         data_list.append(data_row)
-                    values_index += 1
                     try:
-                        value_row = values_list[values_index]
-                    except IndexError:
+                        value_row = it.next()
+                    except StopIteration:
                         break
 
         for display_field in display_fields.filter(
@@ -464,13 +468,14 @@ class DisplayField(AbstractField):
     sort_reverse = models.BooleanField(verbose_name="Reverse", default=False)
     width = models.IntegerField(default=15)
     aggregate = models.CharField(
-        max_length=5,
+        max_length=6,
         choices=(
             ('Sum', 'Sum'),
             ('Count', 'Count'),
             ('Avg', 'Avg'),
             ('Max', 'Max'),
             ('Min', 'Min'),
+            ('Concat', 'Concat'),
         ),
         blank = True
     )
