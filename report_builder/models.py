@@ -232,7 +232,10 @@ class Report(models.Model):
             it = queryset.values_list(*display_field_paths).iterator()
 
             data_list = []
-            value_row = it.next()
+            try:
+                value_row = it.next()
+            except StopIteration:
+                pass
             for obj in queryset:
                 display_property_values = []
                 for display_property in display_field_properties:
