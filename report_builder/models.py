@@ -54,6 +54,11 @@ class Concat(Aggregate):
     template = '%(function)s(%(expressions)s, \', \')'
 
 
+class BoolOr(Aggregate):
+    function = 'bool_or'
+    name = 'BoolOr'
+
+
 class Report(models.Model):
     """ A saved report with queryset and descriptive fields
     """
@@ -96,7 +101,7 @@ class Report(models.Model):
 
     def add_aggregates(self, queryset, display_fields=None):
         agg_funcs = {
-            'Avg': Avg, 'Min': Min, 'Max': Max, 'Count': Count, 'Sum': Sum, 'Concat': Concat
+            'Avg': Avg, 'Min': Min, 'Max': Max, 'Count': Count, 'Sum': Sum, 'Concat': Concat, 'BoolOr': BoolOr
         }
         if display_fields is None:
             display_fields = self.displayfield_set.filter(
@@ -212,7 +217,10 @@ class Report(models.Model):
         if group:
             for field in display_fields:
                 if (not field.group) and (not field.aggregate):
-                    field.aggregate = 'Max'
+                    if 'BooleanField' in field.field_type:
+                        field.aggregate = 'BoolOr'
+                    else:
+                        field.aggregate = 'Max'
             values = queryset.values(*group)
             values = self.add_aggregates(values, display_fields)
             data_list = []
@@ -224,7 +232,7 @@ class Report(models.Model):
                     try:
                         row_data.append(row[field])
                     except KeyError:
-                        row_data.append(row[field + '__max'])
+                        row_data.append(row[field + '__max' if field + '__max' in row else field + '__boolor'])
                 for total in display_totals:
                     increment_total(total, row_data)
                 data_list.append(row_data)
