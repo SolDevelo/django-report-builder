@@ -8,6 +8,7 @@ from django.utils.functional import cached_property
 from django.db import models
 from django.db.models import Avg, Min, Max, Count, Sum, F, Aggregate
 from django.db.models.fields import FieldDoesNotExist
+from django.db.models.sql.aggregates import Aggregate as SQLAggregate
 from six import text_type
 from report_builder.unique_slugify import unique_slugify
 from report_utils.model_introspection import get_model_from_path_string
@@ -49,9 +50,20 @@ def get_allowed_models():
 
 
 class Concat(Aggregate):
-    function = 'string_agg'
-    name = 'Concat'
-    template = '%(function)s(%(expressions)s, \', \')'
+    def add_to_query(self, query, alias, col, source, is_summary):
+        aggregate = SQLConcat(col, source=models.CharField(), is_summary=is_summary, **self.extra)
+        query.aggregates[alias] = aggregate
+
+    def convert_value(self, value, expression, connection, context):
+        return value
+
+
+class SQLConcat(SQLAggregate):
+    sql_function = 'string_agg'
+
+    @property
+    def sql_template(self):
+        return "%(function)s(%(field)s::text, \', \')"
 
 
 class BoolOr(Aggregate):
@@ -110,7 +122,12 @@ class Report(models.Model):
             if display_field.aggregate:
                 func = agg_funcs[display_field.aggregate]
                 full_name = display_field.path + display_field.field
-                queryset = queryset.annotate(func(full_name))
+                if func == Concat:
+                    queryset = queryset.annotate(**{
+                        full_name + '__concat': func(full_name)
+                    })
+                else:
+                    queryset = queryset.annotate(func(full_name))
 
         return queryset
 
@@ -232,7 +249,11 @@ class Report(models.Model):
                     try:
                         row_data.append(row[field])
                     except KeyError:
-                        row_data.append(row[field + '__max' if field + '__max' in row else field + '__boolor'])
+                        annotations = ['__max', '__boolor', '__concat']
+                        for annotation in annotations:
+                            key = field + annotation
+                            if key in row:
+                                row_data.append(row[key])
                 for total in display_totals:
                     increment_total(total, row_data)
                 data_list.append(row_data)
