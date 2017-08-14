@@ -63,7 +63,7 @@ class SQLConcat(SQLAggregate):
 
     @property
     def sql_template(self):
-        return "%(function)s(DISTINCT %(field)s::text, \', \')"
+        return "%(function)s(%(field)s::text, \', \')"
 
 
 class BoolOr(Aggregate):
